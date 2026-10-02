@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1F3A5F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>服サーチ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --indigo:#1F3A5F; --indigo2:#2C5282; --stitch:#E2A03F;
+  --bg:#EEF1F4; --paper:#FFFFFF; --ink:#1A1D21; --sub:#5E6772; --line:#D5DBE2;
+  --danger:#C0392B;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#12161C; --paper:#1C222B; --ink:#E9EDF2; --sub:#9AA4B0; --line:#2E3742; --indigo2:#5B8BD0;
+  }
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font-family:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic",sans-serif;-webkit-tap-highlight-color:transparent}
+header{background:var(--indigo);color:#fff;padding:14px 18px 0;position:sticky;top:env(safe-area-inset-top,0px);z-index:10}
+header h1{margin:0 0 12px;font-size:20px;font-weight:900;letter-spacing:.04em;display:flex;align-items:center;gap:8px}
+header h1 svg{flex:none}
+.tabs{display:flex;gap:4px}
+.tabs button{flex:1;background:none;border:0;color:#B9C8DC;font:inherit;font-weight:700;padding:10px 0 12px;border-bottom:3px dashed transparent;font-size:15px}
+.tabs button.on{color:#fff;border-bottom-color:var(--stitch)}
+main{max-width:560px;margin:0 auto;padding:16px 16px 40px}
+.seg{display:flex;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px;margin-bottom:14px}
+.seg button{flex:1;border:0;background:none;font:inherit;font-weight:700;color:var(--sub);padding:10px 4px;border-radius:9px;font-size:14px}
+.seg button.on{background:var(--indigo);color:#fff}
+.panel{display:none}.panel.on{display:block}
+#reader{width:100%;border-radius:14px;overflow:hidden;background:#000;min-height:220px}
+#reader video{width:100%!important;display:block}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border:0;border-radius:12px;padding:14px;font:inherit;font-weight:700;font-size:16px;background:var(--indigo);color:#fff}
+.btn.ghost{background:var(--paper);color:var(--indigo2);border:1.5px solid var(--line)}
+.btn:disabled{opacity:.5}
+.row{display:flex;gap:8px;margin-top:10px}
+.hint{color:var(--sub);font-size:13px;line-height:1.6;margin:8px 2px}
+input[type=text],input[type=number],textarea{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--paper);border:1.5px solid var(--line);border-radius:10px;padding:11px 12px}
+input:focus,textarea:focus{outline:2px solid var(--indigo2);outline-offset:1px}
+label.f{display:block;font-size:13px;color:var(--sub);font-weight:700;margin:12px 2px 5px}
+#preview{width:100%;border-radius:12px;margin-top:10px;display:none}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{border:1.5px solid var(--indigo2);color:var(--indigo2);background:var(--paper);border-radius:999px;padding:8px 14px;font:inherit;font-weight:700;font-size:15px}
+.progress{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:10px;display:none}
+.progress i{display:block;height:100%;width:0;background:var(--stitch);transition:width .2s}
+
+/* 値札カード */
+.tag{position:relative;background:var(--paper);border-radius:6px 18px 18px 6px;margin:22px 0 0 14px;padding:18px 18px 18px 34px;box-shadow:0 1px 0 var(--line),0 6px 18px rgba(31,58,95,.12)}
+.tag::before{content:"";position:absolute;left:-14px;top:0;bottom:0;width:28px;background:var(--paper);clip-path:polygon(50% 0,100% 0,100% 100%,50% 100%,0 50%)}
+.tag::after{content:"";position:absolute;left:4px;top:50%;width:12px;height:12px;margin-top:-6px;border-radius:50%;background:var(--bg);box-shadow:inset 0 0 0 2px var(--line)}
+.tag .stitch{position:absolute;inset:7px 7px 7px 22px;border:1.5px dashed var(--stitch);border-radius:3px 13px 13px 3px;pointer-events:none;opacity:.7}
+.tag .kind{font-size:12px;color:var(--sub);font-weight:700}
+.tag .code{font-size:26px;font-weight:900;letter-spacing:.03em;word-break:break-all;margin:2px 0 6px}
+.grp{margin-top:16px}
+.grp h3{font-size:14px;margin:0 0 8px;color:var(--indigo2)}
+.links{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.links a{display:block;text-decoration:none;text-align:center;padding:12px 6px;border-radius:10px;background:var(--bg);color:var(--ink);font-weight:700;font-size:14px;border:1px solid var(--line)}
+.links a small{display:block;font-weight:400;color:var(--sub);font-size:11px;margin-top:2px}
+
+/* 履歴 */
+.hist{list-style:none;margin:0;padding:0}
+.hist li{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;display:flex;gap:10px;align-items:center}
+.hist .m{flex:1;min-width:0}
+.hist .c{font-weight:900;font-size:17px;word-break:break-all}
+.hist .s{font-size:12px;color:var(--sub);margin-top:2px}
+.hist .p{font-weight:900;color:var(--indigo2);white-space:nowrap}
+.hist button{border:0;background:none;color:var(--sub);font:inherit;padding:6px}
+.empty{text-align:center;color:var(--sub);padding:40px 10px;line-height:1.8}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:999px;font-weight:700;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:50}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M8 3l-5 3 2 5 2-1v11h10V10l2 1 2-5-5-3c-.5 1.7-2 3-4 3S8.5 4.7 8 3z"/></svg>
+    服サーチ
+  </h1>
+  <nav class="tabs">
+    <button class="on" data-tab="scan">読み取り</button>
+    <button data-tab="hist">履歴</button>
+  </nav>
+</header>
+
+<main>
+  <!-- 読み取り -->
+  <section id="tab-scan" class="panel on">
+    <div class="seg" id="modeSeg">
+      <button class="on" data-mode="bar">バーコード</button>
+      <button data-mode="ocr">タグ品番</button>
+      <button data-mode="manual">手入力</button>
+    </div>
+
+    <div class="panel on" id="mode-bar">
+      <div id="reader"></div>
+      <div class="row">
+        <button class="btn" id="btnStart">カメラを起動</button>
+        <button class="btn ghost" id="btnStop" style="display:none">停止</button>
+      </div>
+      <p class="hint">JAN（EAN-13/8）・UPC・CODE128に対応。バーコードを枠の中に横向きで合わせてください。</p>
+    </div>
+
+    <div class="panel" id="mode-ocr">
+      <label class="btn" for="ocrFile">タグを撮影する</label>
+      <input type="file" id="ocrFile" accept="image/*" capture="environment" hidden>
+      <img id="preview" alt="撮影したタグ">
+      <div class="progress" id="ocrProg"><i></i></div>
+      <p class="hint" id="ocrMsg">品番の部分に寄って、文字が水平になるように撮ると精度が上がります。読み取った候補をタップして選びます。</p>
+      <div class="chips" id="ocrChips"></div>
+    </div>
+
+    <div class="panel" id="mode-manual">
+      <label class="f" for="manualCode">JAN・品番</label>
+      <input type="text" id="manualCode" placeholder="例: 4901234567894 / AB-1234" autocomplete="off">
+      <div class="row"><button class="btn" id="btnManual">この内容で検索</button></div>
+    </div>
+
+    <div id="result"></div>
+  </section>
+
+  <!-- 履歴 -->
+  <section id="tab-hist" class="panel">
+    <input type="text" id="histFilter" placeholder="履歴を絞り込み（品番・ブランド・メモ）">
+    <ul class="hist" id="histList" style="margin-top:12px"></ul>
+    <div class="row"><button class="btn ghost" id="btnClear">履歴をすべて削除</button></div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const KEY = 'fukuSearch.history.v1';
+let current = null;   // {code, kind}
+let scanner = null;
+
+/* ---------- 共通 ---------- */
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on'),1600)}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function loadHist(){try{return JSON.parse(localStorage.getItem(KEY))||[]}catch(e){return []}}
+function saveHist(h){try{localStorage.setItem(KEY,JSON.stringify(h))}catch(e){toast('保存できませんでした')}}
+function isJan(s){return /^\d{8}$|^\d{12,13}$/.test(s)}
+
+/* ---------- タブ ---------- */
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  $('#tab-scan').classList.toggle('on',b.dataset.tab==='scan');
+  $('#tab-hist').classList.toggle('on',b.dataset.tab==='hist');
+  if(b.dataset.tab==='hist'){stopScan();renderHist()}
+});
+document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.toggle('on',x===b));
+  ['bar','ocr','manual'].forEach(m=>$('#mode-'+m).classList.toggle('on',m===b.dataset.mode));
+  if(b.dataset.mode!=='bar') stopScan();
+});
+
+/* ---------- バーコード ---------- */
+$('#btnStart').onclick = async ()=>{
+  try{
+    const F = Html5QrcodeSupportedFormats;
+    scanner = scanner || new Html5Qrcode('reader',{formatsToSupport:[F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.CODE_128],verbose:false});
+    await scanner.start({facingMode:'environment'},{fps:12,qrbox:(w,h)=>({width:Math.floor(w*.85),height:Math.floor(Math.min(h,w)*.4)})},
+      txt=>{ if(navigator.vibrate) navigator.vibrate(60); stopScan(); setResult(txt.trim(),'barcode'); },()=>{});
+    $('#btnStart').style.display='none'; $('#btnStop').style.display='';
+  }catch(e){toast('カメラを起動できません（HTTPSと権限を確認）')}
+};
+$('#btnStop').onclick = stopScan;
+function stopScan(){
+  if(scanner && scanner.isScanning){scanner.stop().catch(()=>{})}
+  $('#btnStart').style.display=''; $('#btnStop').style.display='none';
+}
+
+/* ---------- OCR ---------- */
+let worker = null;
+async function getWorker(){
+  if(worker) return worker;
+  worker = await Tesseract.createWorker('eng',1,{logger:m=>{
+    if(m.status==='recognizing text') $('#ocrProg i').style.width=Math.round(m.progress*100)+'%';
+  }});
+  await worker.setParameters({tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/.',preserve_interword_spaces:'1'});
+  return worker;
+}
+$('#ocrFile').onchange = async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const url = URL.createObjectURL(f);
+  const img = $('#preview'); img.src=url; img.style.display='block';
+  $('#ocrChips').innerHTML=''; $('#ocrProg').style.display='block'; $('#ocrProg i').style.width='0';
+  $('#ocrMsg').textContent='読み取り中…（初回は準備に少し時間がかかります）';
+  try{
+    await img.decode();
+    const c = document.createElement('canvas');
+    const sc = Math.min(1,1800/Math.max(img.naturalWidth,img.naturalHeight));
+    c.width=img.naturalWidth*sc; c.height=img.naturalHeight*sc;
+    const g=c.getContext('2d'); g.filter='grayscale(1) contrast(1.4)'; g.drawImage(img,0,0,c.width,c.height);
+    const w = await getWorker();
+    const {data} = await w.recognize(c);
+    const cands = extractCandidates(data.text);
+    $('#ocrProg').style.display='none';
+    if(!cands.length){$('#ocrMsg').textContent='品番らしき文字が見つかりません。品番部分に寄って撮り直すか、手入力を使ってください。';return}
+    $('#ocrMsg').textContent='品番の候補をタップしてください（違う場合は手入力で修正できます）';
+    $('#ocrChips').innerHTML = cands.map(s=>`<button class="chip">${esc(s)}</button>`).join('');
+    $('#ocrChips').querySelectorAll('.chip').forEach(b=>b.onclick=()=>setResult(b.textContent,'tag'));
+  }catch(err){
+    $('#ocrProg').style.display='none';
+    $('#ocrMsg').textContent='読み取りに失敗しました。通信状態を確認してもう一度撮影してください。';
+  }finally{ e.target.value=''; }
+};
+function extractCandidates(text){
+  const set = new Map();
+  text.split(/[\s]+/).forEach(t=>{
+    t=t.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g,'');
+    if(t.length<4||t.length>24) return;
+    if(!/\d/.test(t)) return;                       // 数字を含むものだけ
+    if(/^\d{1,4}$/.test(t)) return;                 // サイズ・年号っぽい短い数字は除外
+    const score = (/[A-Za-z]/.test(t)?2:0)+(/[-\/]/.test(t)?1:0)+Math.min(t.length,12)/6;
+    set.set(t.toUpperCase(),score);
+  });
+  return [...set.entries()].sort((a,b)=>b[1]-a[1]).slice(0,8).map(x=>x[0]);
+}
+
+/* ---------- 手入力 ---------- */
+$('#btnManual').onclick=()=>{const v=$('#manualCode').value.trim();if(v)setResult(v,isJan(v)?'barcode':'tag')};
+$('#manualCode').onkeydown=e=>{if(e.key==='Enter')$('#btnManual').click()};
+
+/* ---------- 検索リンク ---------- */
+const E = encodeURIComponent;
+const SITES = {
+  used:[
+    {n:'メルカリ',d:'売り切れ',u:q=>`https://jp.mercari.com/search?keyword=${E(q)}&status=sold_out`},
+    {n:'ヤフオク',d:'落札相場',u:q=>`https://auctions.yahoo.co.jp/closedsearch/closedsearch?p=${E(q)}`},
+    {n:'ラクマ',d:'売り切れ',u:q=>`https://fril.jp/s?query=${E(q)}&transaction=soldout`},
+    {n:'セカスト',d:'オンライン在庫',u:q=>`https://www.2ndstreet.jp/search?keyword=${E(q)}`},
+  ],
+  info:[
+    {n:'Google',d:'商品情報',u:q=>`https://www.google.com/search?q=${E(q)}`},
+    {n:'Google画像',d:'見た目で確認',u:q=>`https://www.google.com/search?tbm=isch&q=${E(q)}`},
+    {n:'楽天市場',d:'新品価格',u:q=>`https://search.rakuten.co.jp/search/mall/${E(q)}/`},
+    {n:'Yahoo!ショッピング',d:'新品価格',u:q=>`https://shopping.yahoo.co.jp/search?p=${E(q)}`},
+  ]
+};
+function linksHTML(list,q){return list.map(s=>`<a href="${s.u(q)}" target="_blank" rel="noopener">${s.n}<small>${s.d}</small></a>`).join('')}
+
+function setResult(code,kind,brand=''){
+  current={code,kind};
+  $('#result').innerHTML=`
+  <div class="tag"><span class="stitch"></span>
+    <div class="kind">${kind==='barcode'?'バーコード':'タグ品番'}</div>
+    <div class="code" id="rCode">${esc(code)}</div>
+    <label class="f" for="rBrand">ブランド名（品番と一緒に検索・任意）</label>
+    <input type="text" id="rBrand" value="${esc(brand)}" placeholder="例: UNIQLO / BEAMS" autocomplete="off">
+    <div id="rLinks"></div>
+    <label class="f" for="rPrice">店頭価格（円）</label>
+    <input type="number" id="rPrice" inputmode="numeric" placeholder="例: 1980">
+    <label class="f" for="rMemo">メモ</label>
+    <input type="text" id="rMemo" placeholder="店舗・サイズ・状態など">
+    <div class="row"><button class="btn" id="btnSave">履歴に保存</button></div>
+  </div>`;
+  const upd=()=>{
+    const b=$('#rBrand').value.trim();
+    const q=(kind==='tag'&&b)?`${b} ${code}`:code;
+    $('#rLinks').innerHTML=`<div class="grp"><h3>中古相場</h3><div class="links">${linksHTML(SITES.used,q)}</div></div>
+      <div class="grp"><h3>定価・商品情報</h3><div class="links">${linksHTML(SITES.info,q)}</div></div>`;
+  };
+  $('#rBrand').oninput=upd; upd();
+  $('#btnSave').onclick=()=>{
+    const h=loadHist();
+    h.unshift({id:Date.now(),code,kind,brand:$('#rBrand').value.trim(),price:$('#rPrice').value,memo:$('#rMemo').value.trim(),at:new Date().toISOString()});
+    saveHist(h.slice(0,500)); toast('履歴に保存しました');
+  };
+  $('#result').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+/* ---------- 履歴 ---------- */
+function renderHist(){
+  const f=$('#histFilter').value.trim().toLowerCase();
+  const h=loadHist().filter(x=>!f||[x.code,x.brand,x.memo].join(' ').toLowerCase().includes(f));
+  const ul=$('#histList');
+  if(!h.length){ul.innerHTML=`<li class="empty" style="display:block;border:0;background:none">${f?'該当する履歴はありません':'保存した服がここに並びます。<br>読み取り後に「履歴に保存」を押してください。'}</li>`;return}
+  ul.innerHTML=h.map(x=>{
+    const d=new Date(x.at);
+    return `<li data-id="${x.id}">
+      <div class="m"><div class="c">${esc(x.brand?x.brand+' ':'')}${esc(x.code)}</div>
+      <div class="s">${d.getMonth()+1}/${d.getDate()} ${x.kind==='barcode'?'JAN':'品番'}${x.memo?'　'+esc(x.memo):''}</div></div>
+      ${x.price?`<div class="p">¥${Number(x.price).toLocaleString()}</div>`:''}
+      <button class="del" aria-label="削除"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </li>`}).join('');
+  ul.querySelectorAll('li[data-id]').forEach(li=>{
+    const x=loadHist().find(y=>String(y.id)===li.dataset.id);
+    li.querySelector('.m').onclick=()=>{document.querySelector('.tabs button[data-tab=scan]').click();setResult(x.code,x.kind,x.brand||'')};
+    li.querySelector('.del').onclick=()=>{saveHist(loadHist().filter(y=>String(y.id)!==li.dataset.id));renderHist()};
+  });
+}
+$('#histFilter').oninput=renderHist;
+$('#btnClear').onclick=()=>{if(confirm('履歴をすべて削除しますか？')){saveHist([]);renderHist()}};
+</script>
+</body>
+</html>
