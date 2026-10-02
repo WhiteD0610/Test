@@ -76,6 +76,23 @@ label.f{display:block;font-size:13px;color:var(--sub);font-weight:700;margin:12p
 .empty{text-align:center;color:var(--sub);padding:40px 10px;line-height:1.8}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:999px;font-weight:700;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:50}
 .toast.on{opacity:1}
+
+.ai{margin-top:12px;border-radius:12px;background:var(--bg);padding:12px 14px;border:1px solid var(--line)}
+.ai .h{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;color:var(--sub)}
+.ai .nm{font-size:17px;font-weight:900;margin:6px 0 2px;line-height:1.4}
+.ai .pr{font-size:22px;font-weight:900;color:var(--indigo2);margin-top:6px}
+.ai .nt{font-size:12px;color:var(--sub);line-height:1.6;margin-top:2px}
+.ai .meta{font-size:13px;color:var(--sub);margin-top:2px}
+.ai .src{margin-top:8px;font-size:12px}
+.ai .src a{color:var(--indigo2);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 0}
+.conf{border-radius:999px;padding:2px 9px;font-size:11px;color:#fff}
+.conf.high{background:#2E7D4F}.conf.medium{background:var(--stitch)}.conf.low{background:var(--danger)}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--indigo2);border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.qsel{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.qsel button{border:1.5px solid var(--line);background:var(--paper);color:var(--ink);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qsel button.on{border-color:var(--indigo2);color:var(--indigo2);font-weight:700}
+.settings{margin-top:28px;padding-top:16px;border-top:1px dashed var(--line)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -96,7 +113,7 @@ label.f{display:block;font-size:13px;color:var(--sub);font-weight:700;margin:12p
   <section id="tab-scan" class="panel on">
     <div class="seg" id="modeSeg">
       <button class="on" data-mode="bar">バーコード</button>
-      <button data-mode="ocr">タグ品番</button>
+      <button data-mode="ocr">タグ撮影（AI）</button>
       <button data-mode="manual">手入力</button>
     </div>
 
@@ -113,9 +130,7 @@ label.f{display:block;font-size:13px;color:var(--sub);font-weight:700;margin:12p
       <label class="btn" for="ocrFile">タグを撮影する</label>
       <input type="file" id="ocrFile" accept="image/*" capture="environment" hidden>
       <img id="preview" alt="撮影したタグ">
-      <div class="progress" id="ocrProg"><i></i></div>
-      <p class="hint" id="ocrMsg">品番の部分に寄って、文字が水平になるように撮ると精度が上がります。読み取った候補をタップして選びます。</p>
-      <div class="chips" id="ocrChips"></div>
+      <p class="hint">ブランドタグ・品質表示タグ・値札が読める距離で撮影してください。Geminiが文字を読み取り、商品を特定します。</p>
     </div>
 
     <div class="panel" id="mode-manual">
@@ -132,24 +147,46 @@ label.f{display:block;font-size:13px;color:var(--sub);font-weight:700;margin:12p
     <input type="text" id="histFilter" placeholder="履歴を絞り込み（品番・ブランド・メモ）">
     <ul class="hist" id="histList" style="margin-top:12px"></ul>
     <div class="row"><button class="btn ghost" id="btnClear">履歴をすべて削除</button></div>
+    <div class="settings">
+      <label class="f" for="tokenIn">合言葉（GAS側でAPP_TOKENを設定した場合のみ）</label>
+      <input type="text" id="tokenIn" placeholder="未設定なら空欄" autocomplete="off">
+      <div class="row"><button class="btn ghost" id="btnToken">合言葉を保存</button><button class="btn ghost" id="btnPing">接続テスト</button></div>
+    </div>
   </section>
 </main>
 <div class="toast" id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <script>
+// ===== ここにGASのWebアプリURL（/exec で終わるもの）を貼る =====
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbx6Gs3a4Qr7mj9TXPbPC1OStnVv9177LoVLeIjxxLqUCLWYTZZmivsP9NrV8LoE2lBojQ/exec';
+// ================================================================
+
 const $ = s => document.querySelector(s);
 const KEY = 'fukuSearch.history.v1';
-let current = null;   // {code, kind}
+const TOKEN_KEY = 'fukuSearch.token';
+let current = null;   // {code, kind, ai, query}
 let scanner = null;
 
 /* ---------- 共通 ---------- */
-function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on'),1600)}
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on'),1800)}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function loadHist(){try{return JSON.parse(localStorage.getItem(KEY))||[]}catch(e){return []}}
-function saveHist(h){try{localStorage.setItem(KEY,JSON.stringify(h))}catch(e){toast('保存できませんでした')}}
+function lsGet(k,d){try{const v=localStorage.getItem(k);return v==null?d:v}catch(e){return d}}
+function lsSet(k,v){try{localStorage.setItem(k,v)}catch(e){toast('保存できませんでした')}}
+function loadHist(){try{return JSON.parse(lsGet(KEY,'[]'))||[]}catch(e){return []}}
+function saveHist(h){lsSet(KEY,JSON.stringify(h))}
 function isJan(s){return /^\d{8}$|^\d{12,13}$/.test(s)}
+function yen(n){return '¥'+Number(n).toLocaleString()}
+
+/* ---------- GAS呼び出し ---------- */
+async function callAI(payload){
+  if(!GAS_URL) throw new Error('GAS_URLが未設定です');
+  const r = await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
+    body:JSON.stringify({...payload,token:lsGet(TOKEN_KEY,'')})});
+  const d = await r.json();
+  if(!d.ok) throw new Error(d.error||'AIの呼び出しに失敗しました');
+  return d;
+}
 
 /* ---------- タブ ---------- */
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
@@ -170,7 +207,7 @@ $('#btnStart').onclick = async ()=>{
     const F = Html5QrcodeSupportedFormats;
     scanner = scanner || new Html5Qrcode('reader',{formatsToSupport:[F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.CODE_128],verbose:false});
     await scanner.start({facingMode:'environment'},{fps:12,qrbox:(w,h)=>({width:Math.floor(w*.85),height:Math.floor(Math.min(h,w)*.4)})},
-      txt=>{ if(navigator.vibrate) navigator.vibrate(60); stopScan(); setResult(txt.trim(),'barcode'); },()=>{});
+      txt=>{ if(navigator.vibrate) navigator.vibrate(60); stopScan(); startCode(txt.trim(),'barcode'); },()=>{});
     $('#btnStart').style.display='none'; $('#btnStop').style.display='';
   }catch(e){toast('カメラを起動できません（HTTPSと権限を確認）')}
 };
@@ -180,56 +217,35 @@ function stopScan(){
   $('#btnStart').style.display=''; $('#btnStop').style.display='none';
 }
 
-/* ---------- OCR ---------- */
-let worker = null;
-async function getWorker(){
-  if(worker) return worker;
-  worker = await Tesseract.createWorker('eng',1,{logger:m=>{
-    if(m.status==='recognizing text') $('#ocrProg i').style.width=Math.round(m.progress*100)+'%';
-  }});
-  await worker.setParameters({tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/.',preserve_interword_spaces:'1'});
-  return worker;
-}
-$('#ocrFile').onchange = async e=>{
-  const f = e.target.files[0]; if(!f) return;
-  const url = URL.createObjectURL(f);
-  const img = $('#preview'); img.src=url; img.style.display='block';
-  $('#ocrChips').innerHTML=''; $('#ocrProg').style.display='block'; $('#ocrProg i').style.width='0';
-  $('#ocrMsg').textContent='読み取り中…（初回は準備に少し時間がかかります）';
+/* ---------- コード → AI ---------- */
+async function startCode(code,kind){
+  setResult({code,kind,ai:null,loading:true});
   try{
-    await img.decode();
-    const c = document.createElement('canvas');
-    const sc = Math.min(1,1800/Math.max(img.naturalWidth,img.naturalHeight));
-    c.width=img.naturalWidth*sc; c.height=img.naturalHeight*sc;
-    const g=c.getContext('2d'); g.filter='grayscale(1) contrast(1.4)'; g.drawImage(img,0,0,c.width,c.height);
-    const w = await getWorker();
-    const {data} = await w.recognize(c);
-    const cands = extractCandidates(data.text);
-    $('#ocrProg').style.display='none';
-    if(!cands.length){$('#ocrMsg').textContent='品番らしき文字が見つかりません。品番部分に寄って撮り直すか、手入力を使ってください。';return}
-    $('#ocrMsg').textContent='品番の候補をタップしてください（違う場合は手入力で修正できます）';
-    $('#ocrChips').innerHTML = cands.map(s=>`<button class="chip">${esc(s)}</button>`).join('');
-    $('#ocrChips').querySelectorAll('.chip').forEach(b=>b.onclick=()=>setResult(b.textContent,'tag'));
-  }catch(err){
-    $('#ocrProg').style.display='none';
-    $('#ocrMsg').textContent='読み取りに失敗しました。通信状態を確認してもう一度撮影してください。';
-  }finally{ e.target.value=''; }
-};
-function extractCandidates(text){
-  const set = new Map();
-  text.split(/[\s]+/).forEach(t=>{
-    t=t.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g,'');
-    if(t.length<4||t.length>24) return;
-    if(!/\d/.test(t)) return;                       // 数字を含むものだけ
-    if(/^\d{1,4}$/.test(t)) return;                 // サイズ・年号っぽい短い数字は除外
-    const score = (/[A-Za-z]/.test(t)?2:0)+(/[-\/]/.test(t)?1:0)+Math.min(t.length,12)/6;
-    set.set(t.toUpperCase(),score);
-  });
-  return [...set.entries()].sort((a,b)=>b[1]-a[1]).slice(0,8).map(x=>x[0]);
+    const d = await callAI({mode:'code',code});
+    setResult({code,kind,ai:d.item,sources:d.sources});
+  }catch(e){ setResult({code,kind,ai:null,error:e.message}); }
 }
 
+/* ---------- タグ撮影 → AI ---------- */
+$('#ocrFile').onchange = async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const img = $('#preview'); img.src = URL.createObjectURL(f); img.style.display='block';
+  setResult({code:'',kind:'tag',ai:null,loading:true});
+  try{
+    await img.decode();
+    const c=document.createElement('canvas');
+    const sc=Math.min(1,1400/Math.max(img.naturalWidth,img.naturalHeight));
+    c.width=Math.round(img.naturalWidth*sc); c.height=Math.round(img.naturalHeight*sc);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+    const b64=c.toDataURL('image/jpeg',0.85).split(',')[1];
+    const d = await callAI({mode:'image',image:b64,mimeType:'image/jpeg'});
+    setResult({code:d.item.code||'',kind:'tag',ai:d.item,sources:d.sources});
+  }catch(err){ setResult({code:'',kind:'tag',ai:null,error:err.message}); }
+  finally{ e.target.value=''; }
+};
+
 /* ---------- 手入力 ---------- */
-$('#btnManual').onclick=()=>{const v=$('#manualCode').value.trim();if(v)setResult(v,isJan(v)?'barcode':'tag')};
+$('#btnManual').onclick=()=>{const v=$('#manualCode').value.trim();if(v)startCode(v,isJan(v)?'barcode':'tag')};
 $('#manualCode').onkeydown=e=>{if(e.key==='Enter')$('#btnManual').click()};
 
 /* ---------- 検索リンク ---------- */
@@ -250,58 +266,98 @@ const SITES = {
 };
 function linksHTML(list,q){return list.map(s=>`<a href="${s.u(q)}" target="_blank" rel="noopener">${s.n}<small>${s.d}</small></a>`).join('')}
 
-function setResult(code,kind,brand=''){
-  current={code,kind};
+function aiHTML(st){
+  if(st.loading) return `<div class="ai"><span class="spin"></span>Geminiで商品を特定しています…</div>`;
+  if(st.error) return `<div class="ai"><div class="h">AI判定</div><div class="nt" style="color:var(--danger)">${esc(st.error)}</div>
+    ${st.code?`<div class="row"><button class="btn ghost" id="btnRetry">もう一度AIに聞く</button></div>`:''}</div>`;
+  const a=st.ai; if(!a) return '';
+  const conf={high:'確度 高',medium:'確度 中',low:'確度 低'}[a.confidence]||'';
+  const meta=[a.category,a.material,a.size].filter(Boolean).join(' / ');
+  return `<div class="ai">
+    <div class="h"><span>AI判定</span>${conf?`<span class="conf ${esc(a.confidence)}">${conf}</span>`:''}</div>
+    <div class="nm">${esc([a.brand,a.name].filter(Boolean).join(' '))||'不明'}</div>
+    ${meta?`<div class="meta">${esc(meta)}</div>`:''}
+    <div class="pr">${a.price_jpy?'定価 '+yen(a.price_jpy):'定価 不明'}</div>
+    ${a.price_note?`<div class="nt">${esc(a.price_note)}</div>`:''}
+    ${(st.sources||[]).length?`<div class="src">${st.sources.map(s=>`<a href="${esc(s.uri)}" target="_blank" rel="noopener">${esc(s.title||s.uri)}</a>`).join('')}</div>`:''}
+  </div>`;
+}
+
+function setResult(st){
+  current=st;
+  const a=st.ai||{};
+  const cands=[...new Set([a.query,[a.brand,a.name].filter(Boolean).join(' '),[a.brand,a.code||st.code].filter(Boolean).join(' '),st.code].map(x=>(x||'').trim()).filter(Boolean))];
+  st.query = st.query || cands[0] || '';
   $('#result').innerHTML=`
   <div class="tag"><span class="stitch"></span>
-    <div class="kind">${kind==='barcode'?'バーコード':'タグ品番'}</div>
-    <div class="code" id="rCode">${esc(code)}</div>
-    <label class="f" for="rBrand">ブランド名（品番と一緒に検索・任意）</label>
-    <input type="text" id="rBrand" value="${esc(brand)}" placeholder="例: UNIQLO / BEAMS" autocomplete="off">
+    <div class="kind">${st.kind==='barcode'?'バーコード':'タグ'}</div>
+    <div class="code">${esc(st.code||a.code||'—')}</div>
+    ${aiHTML(st)}
+    ${cands.length?`<label class="f">検索語</label>
+    <div class="qsel" id="qsel">${cands.map(c=>`<button class="${c===st.query?'on':''}">${esc(c)}</button>`).join('')}</div>
+    <input type="text" id="rQuery" value="${esc(st.query)}" style="margin-top:8px" autocomplete="off">
     <div id="rLinks"></div>
     <label class="f" for="rPrice">店頭価格（円）</label>
     <input type="number" id="rPrice" inputmode="numeric" placeholder="例: 1980">
     <label class="f" for="rMemo">メモ</label>
     <input type="text" id="rMemo" placeholder="店舗・サイズ・状態など">
-    <div class="row"><button class="btn" id="btnSave">履歴に保存</button></div>
+    <div class="row"><button class="btn" id="btnSave">履歴に保存</button></div>`:''}
   </div>`;
+  if($('#btnRetry')) $('#btnRetry').onclick=()=>startCode(st.code,st.kind);
+  if(!cands.length) return;
   const upd=()=>{
-    const b=$('#rBrand').value.trim();
-    const q=(kind==='tag'&&b)?`${b} ${code}`:code;
-    $('#rLinks').innerHTML=`<div class="grp"><h3>中古相場</h3><div class="links">${linksHTML(SITES.used,q)}</div></div>
-      <div class="grp"><h3>定価・商品情報</h3><div class="links">${linksHTML(SITES.info,q)}</div></div>`;
+    const q=$('#rQuery').value.trim(); st.query=q;
+    $('#rLinks').innerHTML=q?`<div class="grp"><h3>中古相場</h3><div class="links">${linksHTML(SITES.used,q)}</div></div>
+      <div class="grp"><h3>定価・商品情報</h3><div class="links">${linksHTML(SITES.info,q)}</div></div>`:'';
+    document.querySelectorAll('#qsel button').forEach(b=>b.classList.toggle('on',b.textContent===q));
   };
-  $('#rBrand').oninput=upd; upd();
+  document.querySelectorAll('#qsel button').forEach(b=>b.onclick=()=>{$('#rQuery').value=b.textContent;upd()});
+  $('#rQuery').oninput=upd; upd();
   $('#btnSave').onclick=()=>{
     const h=loadHist();
-    h.unshift({id:Date.now(),code,kind,brand:$('#rBrand').value.trim(),price:$('#rPrice').value,memo:$('#rMemo').value.trim(),at:new Date().toISOString()});
+    h.unshift({id:Date.now(),code:st.code||a.code||'',kind:st.kind,brand:a.brand||'',name:a.name||'',
+      list:a.price_jpy||null,query:st.query,price:$('#rPrice').value,memo:$('#rMemo').value.trim(),
+      ai:st.ai,sources:st.sources||[],at:new Date().toISOString()});
     saveHist(h.slice(0,500)); toast('履歴に保存しました');
   };
-  $('#result').scrollIntoView({behavior:'smooth',block:'start'});
+  if(!st.loading) $('#result').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 /* ---------- 履歴 ---------- */
 function renderHist(){
   const f=$('#histFilter').value.trim().toLowerCase();
-  const h=loadHist().filter(x=>!f||[x.code,x.brand,x.memo].join(' ').toLowerCase().includes(f));
+  const all=loadHist();
+  const h=all.filter(x=>!f||[x.code,x.brand,x.name,x.memo,x.query].join(' ').toLowerCase().includes(f));
   const ul=$('#histList');
   if(!h.length){ul.innerHTML=`<li class="empty" style="display:block;border:0;background:none">${f?'該当する履歴はありません':'保存した服がここに並びます。<br>読み取り後に「履歴に保存」を押してください。'}</li>`;return}
   ul.innerHTML=h.map(x=>{
     const d=new Date(x.at);
+    const title=[x.brand,x.name].filter(Boolean).join(' ')||x.code;
+    const sub=[`${d.getMonth()+1}/${d.getDate()}`,x.code&&x.code!==title?x.code:'',x.list?'定価'+yen(x.list):'',x.memo].filter(Boolean).join('　');
     return `<li data-id="${x.id}">
-      <div class="m"><div class="c">${esc(x.brand?x.brand+' ':'')}${esc(x.code)}</div>
-      <div class="s">${d.getMonth()+1}/${d.getDate()} ${x.kind==='barcode'?'JAN':'品番'}${x.memo?'　'+esc(x.memo):''}</div></div>
-      ${x.price?`<div class="p">¥${Number(x.price).toLocaleString()}</div>`:''}
+      <div class="m"><div class="c">${esc(title)}</div><div class="s">${esc(sub)}</div></div>
+      ${x.price?`<div class="p">${yen(x.price)}</div>`:''}
       <button class="del" aria-label="削除"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </li>`}).join('');
   ul.querySelectorAll('li[data-id]').forEach(li=>{
-    const x=loadHist().find(y=>String(y.id)===li.dataset.id);
-    li.querySelector('.m').onclick=()=>{document.querySelector('.tabs button[data-tab=scan]').click();setResult(x.code,x.kind,x.brand||'')};
+    const x=all.find(y=>String(y.id)===li.dataset.id);
+    li.querySelector('.m').onclick=()=>{document.querySelector('.tabs button[data-tab=scan]').click();
+      setResult({code:x.code,kind:x.kind,ai:x.ai||null,sources:x.sources||[],query:x.query})};
     li.querySelector('.del').onclick=()=>{saveHist(loadHist().filter(y=>String(y.id)!==li.dataset.id));renderHist()};
   });
 }
 $('#histFilter').oninput=renderHist;
 $('#btnClear').onclick=()=>{if(confirm('履歴をすべて削除しますか？')){saveHist([]);renderHist()}};
+
+/* ---------- 設定 ---------- */
+$('#tokenIn').value=lsGet(TOKEN_KEY,'');
+$('#btnToken').onclick=()=>{lsSet(TOKEN_KEY,$('#tokenIn').value.trim());toast('合言葉を保存しました')};
+$('#btnPing').onclick=async()=>{
+  if(!GAS_URL){toast('GAS_URLが未設定です');return}
+  try{const r=await fetch(GAS_URL);const d=await r.json();toast(d.ok?'GASに接続できました':'接続に失敗しました')}
+  catch(e){toast('接続に失敗しました')}
+};
+
 </script>
 </body>
 </html>
