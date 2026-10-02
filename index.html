@@ -206,7 +206,7 @@ async function callAI(payload){
   try{ d = JSON.parse(txt); }catch(e){
     throw new Error('GASがJSON以外を返しました。デプロイの「アクセスできるユーザー」を「全員」にして新バージョンでデプロイし直してください');
   }
-  if(!d.ok) throw new Error((d.error||'AIの呼び出しに失敗しました')+(d.model?`（モデル: ${d.model}）`:''));
+  if(!d.ok) throw new Error((d.error||'AIの呼び出しに失敗しました')+(d.tried&&d.tried.length?`（試したモデル: ${d.tried.join(', ')}）`:d.model?`（モデル: ${d.model}）`:''));
   return d;
 }
 
