@@ -36,8 +36,12 @@ main{max-width:560px;margin:0 auto;padding:16px 16px 40px}
 .seg button{flex:1;border:0;background:none;font:inherit;font-weight:700;color:var(--sub);padding:10px 4px;border-radius:9px;font-size:14px}
 .seg button.on{background:var(--indigo);color:#fff}
 .panel{display:none}.panel.on{display:block}
-#reader{width:100%;border-radius:14px;overflow:hidden;background:#000;min-height:220px}
-#reader video{width:100%!important;display:block}
+#camWrap{position:relative;width:100%;border-radius:14px;overflow:hidden;background:#000;aspect-ratio:3/4;display:none}
+#cam{width:100%;height:100%;object-fit:cover;display:block}
+#camWrap .frame{position:absolute;inset:12% 8%;border:2px dashed rgba(255,255,255,.7);border-radius:10px;pointer-events:none}
+.shutter{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);width:68px;height:68px;border-radius:50%;border:4px solid #fff;background:rgba(255,255,255,.25)}
+.shutter:active{background:rgba(255,255,255,.6)}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .15s}
 .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border:0;border-radius:12px;padding:14px;font:inherit;font-weight:700;font-size:16px;background:var(--indigo);color:#fff}
 .btn.ghost{background:var(--paper);color:var(--indigo2);border:1.5px solid var(--line)}
 .btn:disabled{opacity:.5}
@@ -112,23 +116,16 @@ label.f{display:block;font-size:13px;color:var(--sub);font-weight:700;margin:12p
   <!-- 読み取り -->
   <section id="tab-scan" class="panel on">
     <div class="seg" id="modeSeg">
-      <button class="on" data-mode="bar">バーコード</button>
-      <button data-mode="ocr">タグ撮影（AI）</button>
+      <button class="on" data-mode="ocr">タグ撮影（AI）</button>
       <button data-mode="manual">手入力</button>
     </div>
 
-    <div class="panel on" id="mode-bar">
-      <div id="reader"></div>
-      <div class="row">
-        <button class="btn" id="btnStart">カメラを起動</button>
-        <button class="btn ghost" id="btnStop" style="display:none">停止</button>
-      </div>
-      <p class="hint">JAN（EAN-13/8）・UPC・CODE128に対応。バーコードを枠の中に横向きで合わせてください。</p>
-    </div>
-
-    <div class="panel" id="mode-ocr">
-      <label class="btn" for="ocrFile">タグを撮影する</label>
-      <input type="file" id="ocrFile" accept="image/*" capture="environment" hidden>
+    <div class="panel on" id="mode-ocr">
+      <div id="camWrap"><video id="cam" playsinline muted autoplay></video><div class="frame"></div><div class="flash" id="flash"></div>
+        <button class="shutter" id="btnShot" aria-label="撮影"></button></div>
+      <div class="row"><button class="btn" id="btnCam">カメラを起動</button><button class="btn ghost" id="btnCamStop" style="display:none">カメラを閉じる</button></div>
+      <div class="row"><label class="btn ghost" for="ocrFile">写真から選ぶ</label></div>
+      <input type="file" id="ocrFile" accept="image/*" hidden>
       <img id="preview" alt="撮影したタグ">
       <p class="hint">ブランドタグ・品質表示タグ・値札が読める距離で撮影してください。Geminiが文字を読み取り、商品を特定します。</p>
     </div>
@@ -156,7 +153,6 @@ label.f{display:block;font-size:13px;color:var(--sub);font-weight:700;margin:12p
 </main>
 <div class="toast" id="toast"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 <script>
 // ===== ここにGASのWebアプリURL（/exec で終わるもの）を貼る =====
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbx6Gs3a4Qr7mj9TXPbPC1OStnVv9177LoVLeIjxxLqUCLWYTZZmivsP9NrV8LoE2lBojQ/exec';
@@ -166,7 +162,6 @@ const $ = s => document.querySelector(s);
 const KEY = 'fukuSearch.history.v1';
 const TOKEN_KEY = 'fukuSearch.token';
 let current = null;   // {code, kind, ai, query}
-let scanner = null;
 
 /* ---------- 共通 ---------- */
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on'),1800)}
@@ -193,29 +188,37 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
   $('#tab-scan').classList.toggle('on',b.dataset.tab==='scan');
   $('#tab-hist').classList.toggle('on',b.dataset.tab==='hist');
-  if(b.dataset.tab==='hist'){stopScan();renderHist()}
+  if(b.dataset.tab==='hist'){stopCam();renderHist()}
 });
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.toggle('on',x===b));
-  ['bar','ocr','manual'].forEach(m=>$('#mode-'+m).classList.toggle('on',m===b.dataset.mode));
-  if(b.dataset.mode!=='bar') stopScan();
+  ['ocr','manual'].forEach(m=>$('#mode-'+m).classList.toggle('on',m===b.dataset.mode));
+  if(b.dataset.mode!=='ocr') stopCam();
 });
 
-/* ---------- バーコード ---------- */
-$('#btnStart').onclick = async ()=>{
+/* ---------- 無音カメラ（映像のフレームを切り出すのでシャッター音なし） ---------- */
+let stream=null;
+$('#btnCam').onclick=async()=>{
   try{
-    const F = Html5QrcodeSupportedFormats;
-    scanner = scanner || new Html5Qrcode('reader',{formatsToSupport:[F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.CODE_128],verbose:false});
-    await scanner.start({facingMode:'environment'},{fps:12,qrbox:(w,h)=>({width:Math.floor(w*.85),height:Math.floor(Math.min(h,w)*.4)})},
-      txt=>{ if(navigator.vibrate) navigator.vibrate(60); stopScan(); startCode(txt.trim(),'barcode'); },()=>{});
-    $('#btnStart').style.display='none'; $('#btnStop').style.display='';
+    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1440}}});
+    const v=$('#cam'); v.srcObject=stream; await v.play();
+    $('#camWrap').style.display='block'; $('#btnCam').style.display='none'; $('#btnCamStop').style.display='';
   }catch(e){toast('カメラを起動できません（HTTPSと権限を確認）')}
 };
-$('#btnStop').onclick = stopScan;
-function stopScan(){
-  if(scanner && scanner.isScanning){scanner.stop().catch(()=>{})}
-  $('#btnStart').style.display=''; $('#btnStop').style.display='none';
+$('#btnCamStop').onclick=stopCam;
+function stopCam(){
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+  $('#camWrap').style.display='none'; $('#btnCam').style.display=''; $('#btnCamStop').style.display='none';
 }
+$('#btnShot').onclick=()=>{
+  const v=$('#cam'); if(!v.videoWidth) return;
+  const c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight;
+  c.getContext('2d').drawImage(v,0,0);
+  const fl=$('#flash'); fl.style.opacity='.8'; setTimeout(()=>fl.style.opacity='0',120);
+  if(navigator.vibrate) navigator.vibrate(30);
+  stopCam();
+  c.toBlob(b=>analyzeImage(b),'image/jpeg',0.92);
+};
 
 /* ---------- コード → AI ---------- */
 async function startCode(code,kind){
@@ -227,8 +230,10 @@ async function startCode(code,kind){
 }
 
 /* ---------- タグ撮影 → AI ---------- */
-$('#ocrFile').onchange = async e=>{
-  const f = e.target.files[0]; if(!f) return;
+$('#ocrFile').onchange = e=>{const f=e.target.files[0]; e.target.value=''; if(f) analyzeImage(f)};
+let lastImage=null;
+async function analyzeImage(f){
+  lastImage=f;
   const img = $('#preview'); img.src = URL.createObjectURL(f); img.style.display='block';
   setResult({code:'',kind:'tag',ai:null,loading:true});
   try{
@@ -240,9 +245,8 @@ $('#ocrFile').onchange = async e=>{
     const b64=c.toDataURL('image/jpeg',0.85).split(',')[1];
     const d = await callAI({mode:'image',image:b64,mimeType:'image/jpeg'});
     setResult({code:d.item.code||'',kind:'tag',ai:d.item,sources:d.sources});
-  }catch(err){ setResult({code:'',kind:'tag',ai:null,error:err.message}); }
-  finally{ e.target.value=''; }
-};
+  }catch(err){ setResult({code:'',kind:'tag',ai:null,error:err.message,fromImage:true}); }
+}
 
 /* ---------- 手入力 ---------- */
 $('#btnManual').onclick=()=>{const v=$('#manualCode').value.trim();if(v)startCode(v,isJan(v)?'barcode':'tag')};
@@ -269,7 +273,8 @@ function linksHTML(list,q){return list.map(s=>`<a href="${s.u(q)}" target="_blan
 function aiHTML(st){
   if(st.loading) return `<div class="ai"><span class="spin"></span>Geminiで商品を特定しています…</div>`;
   if(st.error) return `<div class="ai"><div class="h">AI判定</div><div class="nt" style="color:var(--danger)">${esc(st.error)}</div>
-    ${st.code?`<div class="row"><button class="btn ghost" id="btnRetry">もう一度AIに聞く</button></div>`:''}</div>`;
+    ${st.code?`<div class="row"><button class="btn ghost" id="btnRetry">もう一度AIに聞く</button></div>`:''}
+    ${st.fromImage&&lastImage?`<div class="row"><button class="btn ghost" id="btnRetryImg">同じ画像で再読み込み</button></div>`:''}</div>`;
   const a=st.ai; if(!a) return '';
   const conf={high:'確度 高',medium:'確度 中',low:'確度 低'}[a.confidence]||'';
   const meta=[a.category,a.material,a.size].filter(Boolean).join(' / ');
@@ -290,7 +295,7 @@ function setResult(st){
   st.query = st.query || cands[0] || '';
   $('#result').innerHTML=`
   <div class="tag"><span class="stitch"></span>
-    <div class="kind">${st.kind==='barcode'?'バーコード':'タグ'}</div>
+    <div class="kind">${st.kind==='barcode'?'JAN（手入力）':'タグ'}</div>
     <div class="code">${esc(st.code||a.code||'—')}</div>
     ${aiHTML(st)}
     ${cands.length?`<label class="f">検索語</label>
@@ -304,6 +309,7 @@ function setResult(st){
     <div class="row"><button class="btn" id="btnSave">履歴に保存</button></div>`:''}
   </div>`;
   if($('#btnRetry')) $('#btnRetry').onclick=()=>startCode(st.code,st.kind);
+  if($('#btnRetryImg')) $('#btnRetryImg').onclick=()=>analyzeImage(lastImage);
   if(!cands.length) return;
   const upd=()=>{
     const q=$('#rQuery').value.trim(); st.query=q;
